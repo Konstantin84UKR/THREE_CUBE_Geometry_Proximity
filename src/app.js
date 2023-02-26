@@ -13,13 +13,14 @@ const canvas = document.querySelector('canvas.webgl')
 const scene = new THREE.Scene()
 
 const raycaster = new THREE.Raycaster();
-const ray = new THREE.Ray();
+// const ray = new THREE.Ray();
 const pointer = new THREE.Vector2(0,-0.1);
-const pointerNDC = new THREE.Vector3(0, 0, 0);
+// const pointerNDC = new THREE.Vector3(0, 0, 0);
 let planeIntersect = new THREE.Vector3();
 const tmpM = new THREE.Matrix4();
 const currentM = new THREE.Matrix4();
 const mainPos = new THREE.Vector3();
+const maxDistans = 150;
 
 //https://www.npmjs.com/package/three-noise
 const perlin = new Perlin(Math.random())
@@ -27,10 +28,10 @@ const fbm = new FBM(Math.random());
 
 //Texture 
 const textureloader = new THREE.TextureLoader();
-const matCapTexture = textureloader.load("/MatCap/green.jpg")
-const matCapTexture3 = textureloader.load("/MatCap/matcap8.jpg")
-const matCapTexture5 = textureloader.load("/MatCap/skin2.png")
-const matCapTexture9 = textureloader.load("/MatCap/m1.jpeg")
+// const matCapTexture = textureloader.load("/MatCap/green.jpg")
+// const matCapTexture3 = textureloader.load("/MatCap/matcap8.jpg")
+// const matCapTexture5 = textureloader.load("/MatCap/skin2.png")
+// const matCapTexture9 = textureloader.load("/MatCap/m1.jpeg")
 const matCapTexture10 = textureloader.load("/MatCap/grey.png")
 
 /**
@@ -45,15 +46,17 @@ let uniforms = {
 }
 const material = new Material({ color: 0xffffff, wireframe: false, matcap: matCapTexture10, uniforms });
 
-const sizeField = 25;
+const sizeField = 20;
 
 const instances = sizeField * sizeField * sizeField;
 const mesh = new THREE.InstancedMesh(geometry, material, instances);
 let count = 0;
 
 // создаем массив с данными атрибута (attribute data)
-const positionArray = [];
-
+const positionMatrixArray = [];
+const rotationQuaternionArray = [];
+const vectorForPerlin = new Vector3();
+const quaternionMain = new THREE.Quaternion();
 
 for (let i = 0; i < sizeField; i++) {
 
@@ -62,30 +65,49 @@ for (let i = 0; i < sizeField; i++) {
         for (let k = 0; k < sizeField; k++) {
 
         let matrix = new THREE.Matrix4(); 
-            let posInstans = new THREE.Vector3(
+        let matrixMain = new THREE.Matrix4(); 
+    
+        let posInstans = new THREE.Vector3(
                 i * (sizeBoxInstance + 1) - sizeField / 2 * sizeBoxInstance,
                 j * (sizeBoxInstance + 1) - sizeField / 2 * sizeBoxInstance,
                 k * (sizeBoxInstance + 1) - sizeField / 2 * sizeBoxInstance);
         matrix.setPosition(posInstans);
+
         mesh.setMatrixAt(count, matrix);
 
-            let colorPerlin = new THREE.Vector3();
-            colorPerlin.copy(posInstans);
-            colorPerlin.normalize();
-            let colorX = 5 * fbm.get3(colorPerlin.multiplyScalar(5));
-            let colorY = 5 * fbm.get3(colorPerlin.multiplyScalar(0.5));
-            let colorZ = 0.5 + fbm.get3(colorPerlin.multiplyScalar(4));
-        
-            mesh.setColorAt(count, new THREE.Vector3(colorX, colorY, colorZ));
+        // matrixMain.setPosition(posInstans);
+        // positionMatrixArray.push(matrixMain);
 
-        positionArray.push(posInstans);
-     
+        //ROTARION 
+            vectorForPerlin.copy(posInstans);
+            let ndX = 1 * perlin.get3(vectorForPerlin.multiplyScalar(0.1));
+            let ndY = 1 * perlin.get3(vectorForPerlin.multiplyScalar(2.0));
+            let ndZ = 1 * perlin.get3(vectorForPerlin.multiplyScalar(1.5));    
+
+
+        const quaternion = new THREE.Quaternion();
+        quaternion.setFromAxisAngle(new THREE.Vector3(1, 1, 1), Math.PI / 2 * ndX);
+        rotationQuaternionArray.push(quaternion);
+        
+        matrixMain.makeRotationFromQuaternion(new THREE.Quaternion());
+        matrixMain.setPosition(posInstans);
+        positionMatrixArray.push(matrixMain);
+
+        //COLOR
+        let colorPerlin = new THREE.Vector3();
+        colorPerlin.copy(posInstans);
+        colorPerlin.normalize();
+        let colorX = 5 * fbm.get3(colorPerlin.multiplyScalar(5));
+        let colorY = 5 * fbm.get3(colorPerlin.multiplyScalar(0.5));
+        let colorZ = 0.5 + fbm.get3(colorPerlin.multiplyScalar(4));
+        mesh.setColorAt(count, new THREE.Vector3(colorX, colorY, colorZ));
 
         count ++    
             }
     }
 }
-mesh.instanceMainPosition = positionArray;
+mesh.instanceMainPosition = positionMatrixArray;
+mesh.instanceMainRotation = rotationQuaternionArray;
 // // создаем InstancedBufferAttribute
 // mesh.positionAttribute = new THREE.InstancedBufferAttribute(new Float32Array(positionArray), 3, 1);
 
@@ -121,7 +143,7 @@ const sizes = {
  * Camera
  */
 const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 1, 1000)
-camera.position.z = 450
+camera.position.z = 300
 scene.add(camera)
 
 // Controls
@@ -152,7 +174,7 @@ const tick = () => {
     let target = new THREE.Vector3();
     camera.getWorldDirection(target);
     let originPlane = new THREE.Vector3();
-    originPlane.copy(camera.position).addScaledVector(target,450);
+    originPlane.copy(camera.position).addScaledVector(target,300);
     plane.setFromNormalAndCoplanarPoint(target.negate(), originPlane);
 
     // update the picking ray with the camera and pointer position
@@ -174,78 +196,72 @@ const tick = () => {
         mesh.getMatrixAt(i, currentM);
         // mesh.getColorAt(i, mainPos);
 
-        mainPos.copy(mesh.instanceMainPosition[i]);
-        // let positionInstans = new Vector3();  
-        // positionInstans.setFromMatrixPosition(currentM);  
+        // Декомпозируем матрицу Main
+        let positionMain = new THREE.Vector3();
+        let quaternionMain = new THREE.Quaternion();
+        let scaleMain = new THREE.Vector3();
+        mesh.instanceMainPosition[i].decompose(positionMain, quaternionMain, scaleMain);
 
-        let vectorToPointer = new Vector3();
-        vectorToPointer.copy(mesh_HelperCUBE.position);
-        vectorToPointer.sub(mainPos);
+        let positionCurrent = new THREE.Vector3();
+        let quaternionCurrent = new THREE.Quaternion();
+        let scaleCurrent = new THREE.Vector3();
+        currentM.decompose(positionCurrent, quaternionCurrent, scaleCurrent);
 
+        quaternionCurrent.copy(mesh.instanceMainRotation[i]);
+
+        //vectorToPointer
         let vectorForPerlin = new Vector3();
         vectorForPerlin.copy(mesh_HelperCUBE.position);
-        vectorForPerlin.sub(mainPos);
+        vectorForPerlin.sub(positionMain);
         vectorForPerlin.multiplyScalar(0.05);
 
         let nd = 1 * perlin.get3(vectorForPerlin);
-    
-        // const dist = pointerCenter.position.distanceTo(mainPos);
-        const dist = mesh_HelperCUBE.position.distanceTo(mainPos);
-        tmpM.makeRotationX(0);
-        // tmpM.copyPosition(currentPos);
-        // tmpM.setPosition(currentPos);
-        // currentM.copy(tmpM);
+            
+        const distToTrigger = mesh_HelperCUBE.position.distanceTo(positionMain);
 
-        // let nd = 100 * perlin.get2(new Vector2(dist, 0.0));
-    
-        // if (dist < 100 + nd) {
-        let curentPosVec = new Vector3();
         let mainPosVec = new Vector3(); 
-        vectorForPerlin.copy(mainPos);
-
-
-         if (dist < 150 + nd * 10) {
-            // if (dist < 50 ) {
-
-                let d = 1 - THREE.MathUtils.smoothstep(0, dist, 50 * nd);
+        vectorForPerlin.copy(positionMain);
         
-            // tmpM.makeRotationX(d * 0.5);
-            // tmpM.makeRotationY(d * 0.1);
-            // tmpM.makeRotationZ(d * 1.3);
+        let scaleVector = new THREE.Vector3().set(0.3, 0.3, 0.3);
 
-             let ndX = 1 * perlin.get3(vectorForPerlin.multiplyScalar(0.1));
-             let ndY = 1 * perlin.get3(vectorForPerlin.multiplyScalar(2.0));
-             let ndZ = 1 * perlin.get3(vectorForPerlin.multiplyScalar(1.5));
-
-             tmpM.makeRotationX(ndX * 0.5);
-             tmpM.makeRotationY(ndY * 0.1);
-             tmpM.makeRotationZ(ndZ * 1.3);
-
-
+        // если попадает под действия триггера
+        if (distToTrigger < maxDistans + nd * maxDistans) {
+        
+            //Position
+            let ndX = 1 * perlin.get3(vectorForPerlin.multiplyScalar(0.1));
+            let ndY = 1 * perlin.get3(vectorForPerlin.multiplyScalar(2.0));
+            let ndZ = 1 * perlin.get3(vectorForPerlin.multiplyScalar(1.5));
             
-        
-            let noisePosVec = new Vector3(mainPos.x + (ndX) * 50, mainPos.y + (ndY) * 50, mainPos.z + (ndZ) * 150);
-            curentPosVec.setFromMatrixPosition(currentM); 
-            noisePosVec.sub(curentPosVec);
+            let noisePosVec = new Vector3(positionMain.x + (ndX) * 150, positionMain.y + (ndY) * 150, positionMain.z + (ndZ) * 150);
+
+            noisePosVec.sub(positionCurrent);
             noisePosVec.multiplyScalar(0.05);
-            curentPosVec.add(noisePosVec);
+            positionCurrent.add(noisePosVec);
 
-
-            tmpM.setPosition(curentPosVec);
-            currentM.copy(tmpM);
         }else{
-
+            //Остальные инстансы
+           
         
-            mainPosVec.copy(mainPos);
-            curentPosVec.setFromMatrixPosition(currentM);
+            //Position
+            mainPosVec.copy(positionMain);
 
-            mainPosVec.sub(curentPosVec);
+            mainPosVec.sub(positionCurrent);
             mainPosVec.multiplyScalar(0.05);
-            curentPosVec.add(mainPosVec);
-            
-            tmpM.setPosition(curentPosVec);
-            currentM.copy(tmpM);
+            positionCurrent.add(mainPosVec);
+        
         }
+
+        //Scale
+        const distToMainPos = positionCurrent.distanceTo(positionMain);
+        let k =  Math.min(distToMainPos / maxDistans, 1);
+        scaleVector.lerp(scaleMain, 1-k);
+        
+        //Rotation
+        
+        quaternionCurrent.slerp(quaternionMain, 1-k)
+
+        tmpM.compose(positionCurrent, quaternionCurrent, scaleVector);
+        currentM.copy(tmpM);
         mesh.setMatrixAt(i, currentM);
 
     }
