@@ -2,12 +2,11 @@ import * as THREE from 'three'
 import { Vector3, Vector2 } from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { Perlin, FBM } from 'three-noise/build/three-noise.module';
-import { Material } from "./Material";
+import { MaterialCPU } from "./MaterialCPU";
 import * as dat from 'dat.gui';
 
 //GUI
 const gui = new dat.GUI();
-
 
 // Canvas
 const canvas = document.querySelector('canvas.webgl')
@@ -31,11 +30,11 @@ const fbm = new FBM(Math.random());
 
 //Texture 
 const textureloader = new THREE.TextureLoader();
-const matCapTexture = textureloader.load("/MatCap/green.jpg")
-const matCapTexture3 = textureloader.load("/MatCap/matcap8.jpg")
+// const matCapTexture = textureloader.load("/MatCap/green.jpg")
+// const matCapTexture3 = textureloader.load("/MatCap/matcap8.jpg")
 // const matCapTexture5 = textureloader.load("/MatCap/skin2.png")
-const matCapTexture9 = textureloader.load("/MatCap/m1.jpeg")
-// const matCapTexture10 = textureloader.load("/MatCap/grey.png")
+// const matCapTexture9 = textureloader.load("/MatCap/m1.jpeg")
+const matCapTexture10 = textureloader.load("/MatCap/grey.png")
 
 /**
  * Object
@@ -45,45 +44,24 @@ const sizeBoxInstance = 10
 const geometry = new THREE.BoxGeometry(sizeBoxInstance, sizeBoxInstance, sizeBoxInstance);
 
 let uniforms = {
-    u_pointPosition: { value: new Vector3(0, 0, 0) },
-    u_mixFactor: { value: 0.0 },
-    u_time:  { value: 0 },
-    u_groupMatrix: { value: new THREE.Matrix4().identity()}
+    u_pointPosition: { value: new Vector3(10, 10, 10) }
 }
-const material = new Material({ color: 0xffffff, wireframe: false, matcap: matCapTexture3, uniforms });
+const material = new MaterialCPU({ color: 0xffffff, wireframe: false, matcap: matCapTexture10, uniforms });
 
-// const material = new Material({ uniforms }).material;
-
-const sizeField = 25;
+const sizeField = 20;
 
 // const instances = sizeField * sizeField * sizeField;
 let a = sizeField * sizeField * sizeField;
 let b = (sizeField - 2)  * (sizeField - 2) * (sizeField - 2);
-const instances = a-b;
+const instances = a - b;
 const mesh = new THREE.InstancedMesh(geometry, material, instances);
 let count = 0;
 
-
-// Задаем параметры инстансов
-var offsets = [];
-for (var i = 0; i < instances; i++) {
-    var x = Math.random() * 100;
-    var y = Math.random() * 100;
-    var z = Math.random() * 100;
-    offsets.push(x, y, z);
-}
-var offsetAttribute = new THREE.InstancedBufferAttribute(new Float32Array(offsets), 3);
-mesh.geometry.setAttribute('instanceOffset', offsetAttribute);
-
 // создаем массив с данными атрибута (attribute data)
 const positionMatrixArray = [];
-const positionMatrixArrayGLSL = [];
 const rotationQuaternionArray = [];
 const vectorForPerlin = new Vector3();
 const quaternionMain = new THREE.Quaternion();
-const instancePositionNoiseGLSL = [];
-// const instanceScaleNoiseGLSL = [];
-// const instanceQuaternionGLSL = [];
 
 for (let i = 0; i < sizeField; i++) {
 
@@ -105,34 +83,24 @@ for (let i = 0; i < sizeField; i++) {
         matrix.setPosition(posInstans);
 
         mesh.setMatrixAt(count, matrix);
-            // positionMatrixArrayGLSL.push(matrix.elements);
 
         // matrixMain.setPosition(posInstans);
         // positionMatrixArray.push(matrixMain);
 
         //ROTARION 
-            let positionMain = new THREE.Vector3();
-            positionMain.copy(posInstans)
             vectorForPerlin.copy(posInstans);
-            vectorForPerlin.multiplyScalar(0.05);
-           //         //Position
             let ndX = 1 * perlin.get3(vectorForPerlin.multiplyScalar(0.1));
             let ndY = 1 * perlin.get3(vectorForPerlin.multiplyScalar(2.0));
-            let ndZ = 1 * perlin.get3(vectorForPerlin.multiplyScalar(1.5));
-            
-            let noisePosVec = new Vector3(positionMain.x + (ndX) * 100, positionMain.y + (ndY) * 100, positionMain.z + (ndZ) * 100);
+            let ndZ = 1 * perlin.get3(vectorForPerlin.multiplyScalar(1.5));    
 
-            instancePositionNoiseGLSL.push(noisePosVec.toArray());
 
         const quaternion = new THREE.Quaternion();
-        quaternion.setFromAxisAngle(new THREE.Vector3(1, 1, 1), Math.PI / 1 );
+        quaternion.setFromAxisAngle(new THREE.Vector3(1, 1, 1), Math.PI / 2 * ndX);
         rotationQuaternionArray.push(quaternion);
         
-        // matrixMain.makeRotationFromQuaternion(quaternion);
-        matrixMain.setPosition(noisePosVec);
-        
+        matrixMain.makeRotationFromQuaternion(new THREE.Quaternion());
+        matrixMain.setPosition(posInstans);
         positionMatrixArray.push(matrixMain);
-        positionMatrixArrayGLSL.push(matrixMain.elements);
 
         //COLOR
         let colorPerlin = new THREE.Vector3();
@@ -141,27 +109,20 @@ for (let i = 0; i < sizeField; i++) {
         let colorX = 5 * fbm.get3(colorPerlin.multiplyScalar(5));
         let colorY = 5 * fbm.get3(colorPerlin.multiplyScalar(0.5));
         let colorZ = 0.5 + fbm.get3(colorPerlin.multiplyScalar(4));
-       
-        // mesh.setColorAt(count, new THREE.Vector3(colorX, colorY, colorZ));
-        mesh.setColorAt(count, new THREE.Vector3(1.0, 1.0, 1.0));
+        mesh.setColorAt(count, new THREE.Vector3(colorX, colorY, colorZ));
 
         count ++    
-        }
+            }
     }
 }
 mesh.instanceMainPosition = positionMatrixArray;
 mesh.instanceMainRotation = rotationQuaternionArray;
 // // создаем InstancedBufferAttribute
+// mesh.positionAttribute = new THREE.InstancedBufferAttribute(new Float32Array(positionArray), 3, 1);
 
-mesh.instanceMainPositionGLSL = new THREE.InstancedBufferAttribute(new Float32Array(positionMatrixArrayGLSL.flat()), 16);
-mesh.geometry.setAttribute('instancePositionMatrix', mesh.instanceMainPositionGLSL);
+// mesh.geometry.setAttribute('instanceColorMainPosition', positionAttribute);
 
-mesh.instancePositionNoise = new THREE.InstancedBufferAttribute(new Float32Array(instancePositionNoiseGLSL.flat()), 3);
-mesh.geometry.setAttribute('instancePositionNoise', mesh.instancePositionNoise);
-
-const group = new THREE.Group();
-group.add(mesh);
-scene.add(group);
+scene.add(mesh);
 
 const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 scene.add(plane)
@@ -179,8 +140,6 @@ const mesh_HelperCUBE = new THREE.Mesh(geometry_HelperCUBE, material_HelperCUBE)
 material_HelperCUBE.wireframe = true;
 scene.add(mesh_HelperCUBE);
 
-helper.visible = false
-material_HelperCUBE.visible= false
 /**
  * Sizes
  */
@@ -192,7 +151,7 @@ const sizes = {
 /**
  * Camera
  */
-const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 1, 2000)
+const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 1, 1000)
 camera.position.z = 700
 scene.add(camera)
 
@@ -202,10 +161,6 @@ controls.enableDamping = true
 
 canvas.addEventListener('pointermove', onPointerMove);
 window.addEventListener('resize', onResize);
-
-
-let mixFactor = gui.add(uniforms.u_mixFactor, "value", 0.0, 1.0, 0.01);
-mixFactor.setValue(1.0);
 
 // Renderer
 const renderer = new THREE.WebGLRenderer({
@@ -221,15 +176,14 @@ const tick = () => {
     const elapsedTime = clock.getElapsedTime()
 
     // Update controls
-    controls.update();
+    controls.update()
 
-    // group.rotateY(0.01);
 
     //Plane 
     let target = new THREE.Vector3();
     camera.getWorldDirection(target);
     let originPlane = new THREE.Vector3();
-    originPlane.copy(camera.position).addScaledVector(target,600);
+    originPlane.copy(camera.position).addScaledVector(target,300);
     plane.setFromNormalAndCoplanarPoint(target.negate(), originPlane);
 
     // update the picking ray with the camera and pointer position
@@ -244,13 +198,86 @@ const tick = () => {
 
     mesh_HelperCUBE.position.set(pointerCenter.position.x, pointerCenter.position.y, pointerCenter.position.z);
 
-    uniforms.u_pointPosition.value = mesh_HelperCUBE.position.toArray();
-    uniforms.u_time.value = elapsedTime;
-    uniforms.u_groupMatrix.value = group.matrixWorld;
+    
+    //instances
+    for (let i = 0; i < instances -1; i++) {
+    
+        mesh.getMatrixAt(i, currentM);
+        // mesh.getColorAt(i, mainPos);
+
+        // Декомпозируем матрицу Main
+        let positionMain = new THREE.Vector3();
+        let quaternionMain = new THREE.Quaternion();
+        let scaleMain = new THREE.Vector3();
+        mesh.instanceMainPosition[i].decompose(positionMain, quaternionMain, scaleMain);
+
+        let positionCurrent = new THREE.Vector3();
+        let quaternionCurrent = new THREE.Quaternion();
+        let scaleCurrent = new THREE.Vector3();
+        currentM.decompose(positionCurrent, quaternionCurrent, scaleCurrent);
+
+        quaternionCurrent.copy(mesh.instanceMainRotation[i]);
+
+        //vectorToPointer
+        let vectorForPerlin = new Vector3();
+        vectorForPerlin.copy(mesh_HelperCUBE.position);
+        vectorForPerlin.sub(positionMain);
+        vectorForPerlin.multiplyScalar(0.05);
+
+        let nd = 1 * perlin.get3(vectorForPerlin);
+            
+        const distToTrigger = mesh_HelperCUBE.position.distanceTo(positionMain);
+
+        let mainPosVec = new Vector3(); 
+        vectorForPerlin.copy(positionMain);
+        
+        let scaleVector = new THREE.Vector3().set(0.3, 0.3, 0.3);
+
+        // если попадает под действия триггера
+        if (distToTrigger < maxDistans + nd * maxDistans) {
+        
+            //Position
+            let ndX = 1 * perlin.get3(vectorForPerlin.multiplyScalar(0.1));
+            let ndY = 1 * perlin.get3(vectorForPerlin.multiplyScalar(2.0));
+            let ndZ = 1 * perlin.get3(vectorForPerlin.multiplyScalar(1.5));
+            
+            let noisePosVec = new Vector3(positionMain.x + (ndX) * 150, positionMain.y + (ndY) * 150, positionMain.z + (ndZ) * 150);
+
+            noisePosVec.sub(positionCurrent);
+            noisePosVec.multiplyScalar(0.01);
+            positionCurrent.add(noisePosVec);
+
+        }else{
+            //Остальные инстансы
+            //Position
+            mainPosVec.copy(positionMain);
+
+            mainPosVec.sub(positionCurrent);
+            mainPosVec.multiplyScalar(0.05);
+            positionCurrent.add(mainPosVec);
+        
+        }
+
+        //Scale
+        const distToMainPos = positionCurrent.distanceTo(positionMain);
+        let k =  Math.min(distToMainPos / maxDistans, 1);
+        scaleVector.lerp(scaleMain, 1-k);
+        
+        //Rotation
+        
+        quaternionCurrent.slerp(quaternionMain, 1-k)
+
+        tmpM.compose(positionCurrent, quaternionCurrent, scaleVector);
+        currentM.copy(tmpM);
+        mesh.setMatrixAt(i, currentM);
+
+    }
+
+ 
+    // uniforms.u_pointPosition.value = planeIntersect;
     
     mesh.instanceMatrix.needsUpdate = true;
     mesh.instanceColor.needsUpdate = false;
-    
 
     // Render
     renderer.render(scene, camera)
