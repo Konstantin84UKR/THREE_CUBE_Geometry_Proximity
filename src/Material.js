@@ -10,7 +10,9 @@ export class Material extends MeshMatcapMaterial {
             shader.uniforms.u_pointPosition = uniforms.u_pointPosition;    
             shader.uniforms.u_mixFactor = uniforms.u_mixFactor; 
             shader.uniforms.u_time = uniforms.u_time; 
-            shader.uniforms.u_groupMatrix = uniforms.u_groupMatrix; 
+            shader.uniforms.u_distanceEffect = uniforms.u_distanceEffect; 
+            shader.uniforms.u_noiseScale = uniforms.u_noiseScale; 
+            shader.uniforms.u_scaleEffect = uniforms.u_scaleEffect; 
 
 
             // ---------------------------------------vertexShader
@@ -19,13 +21,9 @@ export class Material extends MeshMatcapMaterial {
             uniform vec3 u_pointPosition;
             uniform float u_mixFactor;
             uniform float u_time;
-            uniform mat4 u_groupMatrix;
-            
-            #ifdef USE_INSTANCING
-                attribute vec3 instancePositionNoise;
-                attribute mat4 instancePositionMatrix; // IPM
-            #endif
-
+            uniform float u_distanceEffect;
+            uniform float u_noiseScale;
+            uniform float u_scaleEffect;
 
             mat4 rotation3d(vec3 axis, float angle) {
             axis = normalize(axis);
@@ -57,45 +55,45 @@ export class Material extends MeshMatcapMaterial {
             /*glsl*/ `     
 
             vec4 mvPosition = vec4( transformed, 1.0 );
-           
+        
             #ifdef USE_INSTANCING
-               
+        
                 mat4 instanceMatrixTransformed = instanceMatrix;
 
-                float mixfactor = 0.1;
-                vec3 positionIPM = vec3(instancePositionMatrix[3]);
+                float mixfactor = u_mixFactor;
+                // vec3 positionIPM = instancePositionNoise;
                 vec3 positionI = vec3(instanceMatrixTransformed[3]);
-                float N = noise(positionIPM) * 0.2;
-                float distance =  clamp(distance(positionI, u_pointPosition)/250.0 + N,0.0,1.0);
-                vec3 positionMix = mix(vec3(0),positionIPM, (1.0 - distance) * u_mixFactor);
-                float timeFactor = sin(u_time) * 1.0 * (1.0 - distance) * u_mixFactor;
-                
-                
+                float N = noise(positionI) * u_noiseScale;
+                float distance =  clamp(distance(positionI, u_pointPosition)/u_distanceEffect + N,0.0,1.0);
+                vec3 positionMix = mix(vec3(0),positionI * N * vec3(u_scaleEffect), (1.0 - distance) * mixfactor);
+                float timeFactor = sin(u_time) * 1.0 * (1.0 - distance) * mixfactor;
+
                 //Scale  
-                // mat4 scaleInstance = scale(0.1 + (1.0 - distance) * u_mixFactor);  
-                mat4 scaleInstance = scale(0.1 + (distance) * u_mixFactor);    
+                //  mat4 scaleInstance = scale(0.1 + (distance) * mixfactor); 
+                mat4 scaleInstance = scale(0.1 + (1.0- distance) * mixfactor);       
+
                 //Rotation
                 mat4 rot = rotation3d(normalize(vec3(1.0 + N, 0.5 + N, 0.8 + N)), 3.1415 * 1.0 * (1.0 - distance) * timeFactor);
                 mat4 m4 = instanceMatrixTransformed * rot * scaleInstance;
                 mvPosition = (m4) * mvPosition;
-                
+
                 //Position
                 positionMix = mix(positionMix, positionMix * 0.9, timeFactor );
                 mvPosition = mvPosition + vec4(positionMix,0.0);
+                //  mvPosition = mvPosition + vec4(positionIPM,0.0);
                 
                 transformedNormal = objectNormal;
                 m = mat3( instanceMatrixTransformed );
                 transformedNormal /= vec3( dot( m[ 0 ], m[ 0 ] ), dot( m[ 1 ], m[ 1 ] ), dot( m[ 2 ], m[ 2 ] ) );
                 transformedNormal = m * transformedNormal;
                 vNormal = normalMatrix * mat3(rot) * transformedNormal;
-                //  vNormal =  vec3(instanceMatrix * rot * vec4(transformedNormal,0.0));
             
             #endif
 
             mvPosition = modelViewMatrix * mvPosition;
             gl_Position = projectionMatrix * mvPosition;
             `
-                );
+            );
 
 
             // ---------------------------------------fragmentShader
