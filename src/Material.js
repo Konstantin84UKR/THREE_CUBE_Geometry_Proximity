@@ -8,36 +8,15 @@ export class Material extends MeshMatcapMaterial {
         this.onBeforeCompile = (shader) => {
 
             shader.uniforms.u_pointPosition = uniforms.u_pointPosition;    
-            shader.uniforms.u_mixFactor = uniforms.u_mixFactor; 
-            shader.uniforms.u_time = uniforms.u_time; 
-            shader.uniforms.u_distanceEffect = uniforms.u_distanceEffect; 
-            shader.uniforms.u_noiseScale = uniforms.u_noiseScale; 
-            shader.uniforms.u_scaleEffect = uniforms.u_scaleEffect; 
-
-
             // ---------------------------------------vertexShader
             shader.vertexShader = /*glsl*/ `
 
             uniform vec3 u_pointPosition;
-            uniform float u_mixFactor;
-            uniform float u_time;
-            uniform float u_distanceEffect;
-            uniform float u_noiseScale;
-            uniform float u_scaleEffect;
 
-            mat4 rotation3d(vec3 axis, float angle) {
-            axis = normalize(axis);
-            float s = sin(angle);
-            float c = cos(angle);
-            float oc = 1.0 - c;
-
-            return mat4(
-                oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,  0.0,
-                oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,  0.0,
-                oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c,           0.0,
-                0.0,                                0.0,                                0.0,                                1.0
-            );
-            }
+            #ifdef USE_INSTANCING
+                attribute vec3 instanceNormalEffect;
+                attribute float instanceLayer;
+            #endif
 
             mat4 scale(float c)
             {
@@ -59,35 +38,29 @@ export class Material extends MeshMatcapMaterial {
             #ifdef USE_INSTANCING
         
                 mat4 instanceMatrixTransformed = instanceMatrix;
-
-                float mixfactor = u_mixFactor;
-                // vec3 positionIPM = instancePositionNoise;
                 vec3 positionI = vec3(instanceMatrixTransformed[3]);
-                float N = noise(positionI) * u_noiseScale;
-                float distance =  clamp(distance(positionI, u_pointPosition)/u_distanceEffect + N,0.0,1.0);
-                vec3 positionMix = mix(vec3(0),positionI * N * vec3(u_scaleEffect), (1.0 - distance) * mixfactor);
-                float timeFactor = sin(u_time) * 1.0 * (1.0 - distance) * mixfactor;
 
-                //Scale  
-                //  mat4 scaleInstance = scale(0.1 + (distance) * mixfactor); 
-                mat4 scaleInstance = scale(0.1 + (1.0- distance) * mixfactor);       
+                float distance =  distance(positionI, u_pointPosition) / 100.0;
+                float noisePerlin =  noise(positionI)*0.3;
+                float distanceN =  clamp(distance + noisePerlin, 0.0, 1.0);
 
-                //Rotation
-                mat4 rot = rotation3d(normalize(vec3(1.0 + N, 0.5 + N, 0.8 + N)), 3.1415 * 1.0 * (1.0 - distance) * timeFactor);
-                mat4 m4 = instanceMatrixTransformed * rot * scaleInstance;
-                mvPosition = (m4) * mvPosition;
+                // //Scale  
+                float scalefactor = mix(1.0,0.0,smoothstep(0.8,1.0,distanceN)); 
 
-                //Position
-                positionMix = mix(positionMix, positionMix * 0.9, timeFactor );
+                if( scalefactor < 0.5){
+                    scalefactor = 0.0;
+                }
+                mat4 scaleInstance = scale(scalefactor);       
+
+                // //Rotation
+                // mat4 rot = rotation3d(normalize(vec3(1.0 + N, 0.5 + N, 0.8 + N)), 3.1415 * 1.0 * (1.0 - distance) * timeFactor);
+                 mat4 m4 = instanceMatrixTransformed * scaleInstance;
+                 mvPosition = (m4) * mvPosition;
+
+                // //Position
+                vec3 positionMix = mix(vec3(0), instanceNormalEffect * (3.0 * instanceLayer), smoothstep(0.2,1.0,distanceN));
                 mvPosition = mvPosition + vec4(positionMix,0.0);
-                //  mvPosition = mvPosition + vec4(positionIPM,0.0);
-                
-                transformedNormal = objectNormal;
-                m = mat3( instanceMatrixTransformed );
-                transformedNormal /= vec3( dot( m[ 0 ], m[ 0 ] ), dot( m[ 1 ], m[ 1 ] ), dot( m[ 2 ], m[ 2 ] ) );
-                transformedNormal = m * transformedNormal;
-                vNormal = normalMatrix * mat3(rot) * transformedNormal;
-            
+
             #endif
 
             mvPosition = modelViewMatrix * mvPosition;
@@ -98,19 +71,8 @@ export class Material extends MeshMatcapMaterial {
 
             // ---------------------------------------fragmentShader
             shader.fragmentShader = /*glsl*/  `
-
             
             ` + shader.fragmentShader;
-
-            //     shader.fragmentShader = shader.fragmentShader.replace(
-            //         "#include <output_fragment>",
-            // /*glsl*/ `#include <output_fragment>       
-
-            // diffuseColor = vec4(1.0,0.0,0.5 , 1.0);
-            
-            // gl_FragColor = diffuseColor; `
-            
-            // );
 
         };
     }

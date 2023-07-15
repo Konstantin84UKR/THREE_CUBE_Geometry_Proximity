@@ -4,187 +4,150 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { Material } from "./Material";
 import * as dat from 'dat.gui';
 
-async function main(){
-//GUI
-const gui = new dat.GUI();
+async function main() {
+    //GUI
+    const gui = new dat.GUI();
 
-// Canvas
-const canvas = document.querySelector('canvas.webgl')
+    // Canvas
+    const canvas = document.querySelector('canvas.webgl')
 
-// Scene
-const scene = new THREE.Scene();
+    // Scene
+    const scene = new THREE.Scene();
 
-const raycaster = new THREE.Raycaster();
-const pointer = new THREE.Vector2(0,-1.0);
+    const pointer = new THREE.Vector2(0, -1.0);
 
-let planeSettings = {
-    originPlane: new THREE.Vector3(),
-    planeIntersect: new THREE.Vector3(),
-    planeDistans : 500   
-}
+    //Texture 
+    const textureloader = new THREE.TextureLoader();
+    const matCapTexture3 = textureloader.load("MatCap/matcap8.jpg");
+    /**
+     * Object
+     */
 
-//Texture 
-const textureloader = new THREE.TextureLoader();
-const matCapTexture3 = textureloader.load("MatCap/matcap8.jpg")
+    const sizeBoxInstance = 10;
+    const geometry = new THREE.BoxGeometry(sizeBoxInstance, sizeBoxInstance, sizeBoxInstance);
+    geometry.scale(0.95, 0.95, 0.05);
 
-/**
- * Object
- */
-
-//Model For Point
-
-// const geometryModelForPoints = new THREE.TorusKnotGeometry(200, 40, 600, 30, 3, 4);
-const geometryModelForPoints =   new THREE.BoxGeometry(250, 250, 250, 30, 30, 30);
-// const geometryModelForPoints = new THREE.TorusGeometry(250, 50, 8, 50);
-
-const COUNT_POINTS = geometryModelForPoints.attributes.position.count;
-const arratPoints = geometryModelForPoints.attributes.position.array;
+    let uniforms = {
+        u_pointPosition: { value: new Vector3(0, 0, 0) }
+    }
+    const material = new Material({ color: 0xffffff, wireframe: false, matcap: matCapTexture3, uniforms });
 
 
-//MeshMatcapMaterial
-const sizeBoxInstance = 10
-const geometry = new THREE.BoxGeometry(sizeBoxInstance, sizeBoxInstance, sizeBoxInstance);
+    const sizeField = 8;
+    const COUNT_POINTS = sizeField * sizeField * 6 * 4;
+    // const material = new THREE.MeshMatcapMaterial({ color: 0xffffff, wireframe: false, matcap: matCapTexturegrey });
+    const mesh = new THREE.InstancedMesh(geometry, material, COUNT_POINTS);
+    let instanceAttribute = fuilsBilder(mesh, sizeField, sizeBoxInstance);
+    mesh.instanceNormalEffect = new THREE.InstancedBufferAttribute(new Float32Array(instanceAttribute.instanceNormalEffect.flat()), 3);
+    mesh.geometry.setAttribute('instanceNormalEffect', mesh.instanceNormalEffect);
+    mesh.instanceLayer = new THREE.InstancedBufferAttribute(new Float32Array(instanceAttribute.instanceLayer), 1);
+    mesh.geometry.setAttribute('instanceLayer', mesh.instanceLayer);
 
-let uniforms = {
-    u_pointPosition: { value: new THREE.Vector3(0, 0, 0) },
-    u_mixFactor: { value: 0.0 },
-    u_time:  { value: 0 },
-    u_groupMatrix: { value: new THREE.Matrix4().identity()},
-    u_distanceEffect: { value: 250.0 },
-    u_noiseScale: { value: 1.0 },
-    u_scaleEffect: { value: 1.0 }
-}
-const material = new Material({ color: 0xffffff, wireframe: false, matcap: matCapTexture3, uniforms });
-const mesh = new THREE.InstancedMesh(geometry, material, COUNT_POINTS);
+    scene.add(mesh);
 
-    for (let i = 0; i < COUNT_POINTS; i++) {
+    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    scene.add(plane)
+    // const helper = new THREE.PlaneHelper(plane, 10, 0xffff00);
+    // scene.add(helper);
 
-        let matrix = new THREE.Matrix4(); 
+    const pointerCenter = new THREE.Object3D();
+    pointerCenter.t = 0.0;
+    scene.add(pointerCenter)
 
-        let posInstans = new THREE.Vector3(
-            arratPoints[i * 3],
-            arratPoints[i * 3 + 1], 
-            arratPoints[i * 3 + 2]);
+    /**
+     * Helper
+     */
+    const geometry_HelperCUBE = new THREE.BoxGeometry(1, 1, 1);
+    const material_HelperCUBE = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+    const mesh_HelperCUBE = new THREE.Mesh(geometry_HelperCUBE, material_HelperCUBE);
+    material_HelperCUBE.wireframe = true;
+    scene.add(mesh_HelperCUBE);
+    const axesHelper = new THREE.AxesHelper(500);
+    scene.add(axesHelper);
 
-        posInstans.multiplyScalar(1);   
+    //Create a closed wavey loop
+    const linePointer = sizeField * sizeBoxInstance;
+    const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, linePointer, linePointer),
+        new THREE.Vector3(linePointer, linePointer, linePointer),
+        new THREE.Vector3(linePointer, linePointer, 0),
+
+        new THREE.Vector3(linePointer, 0, 0),
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, linePointer)
+    ], true,'catmullrom',0);
+
+    const points = curve.getPoints(50);
+    const geometryLine = new THREE.BufferGeometry().setFromPoints(points);
+    const materialLine = new THREE.LineBasicMaterial({ color: 0xffff00 });
+    // Create the final object to add to the scene
+    const curveObject = new THREE.Line(geometryLine, materialLine);
+    scene.add(curveObject);
+
+    mesh_HelperCUBE.visible = false;
+    axesHelper.visible = false;
+    curveObject.visible = false;
     
-        matrix.setPosition(posInstans);
 
-        mesh.setMatrixAt(i, matrix);      
-
-        mesh.setColorAt(i, new THREE.Vector3(1.0, 1.0, 1.0));
-
+    /**
+     * Sizes
+     */
+    const sizes = {
+        width: window.innerWidth, // 800
+        height: window.innerHeight // 600
     }
 
-scene.add(mesh);
+    /**
+     * Camera
+     */
+    const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 1, 500);
+    camera.position.x = 120;
+    camera.position.y = 120;
+    camera.position.z = 120;
+    scene.add(camera);
 
-const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-scene.add(plane);
+    // Controls
+    const controls = new OrbitControls(camera, canvas)
+    controls.enableDamping = true
 
-const pointerCenter = new THREE.Object3D();
-scene.add(pointerCenter)
-
-//Helper
-let helpersSettings = {
-    visible: false
-}
-
-const geometry_HelperCUBE = new THREE.BoxGeometry(10, 10, 10);
-const material_HelperCUBE = new THREE.MeshBasicMaterial({ color: 0xffff00 });
-const mesh_HelperCUBE = new THREE.Mesh(geometry_HelperCUBE, material_HelperCUBE);
-material_HelperCUBE.wireframe = true;
-scene.add(mesh_HelperCUBE);
-
-const helperPlane = new THREE.PlaneHelper(plane, 50, 0xffff00);
-scene.add(helperPlane);
-
-helperPlane.visible = helpersSettings.visible;
-material_HelperCUBE.visible = helpersSettings.visible
-/////////////////////////
-
-/**
- * Sizes
- */
-const sizes = {
-    width: window.innerWidth, // 800
-    height: window.innerHeight // 600
-}
-
-/**
- * Camera
- */
-const camera = new THREE.PerspectiveCamera(75, sizes.width / sizes.height, 1, 2000)
-camera.position.z = 700
-scene.add(camera)
-
-// Controls
-const controls = new OrbitControls(camera, canvas)
-controls.enableDamping = true
-
-canvas.addEventListener('pointermove', onPointerMove);
-window.addEventListener('resize', onResize);
-
-
-gui.add(uniforms.u_mixFactor, "value", 0.0, 1.0, 0.01).setValue(1.0).name("u_mixFactor");
-gui.add(planeSettings , 'planeDistans', 0.100, 1000.0, 10.0).setValue(500.0);
-gui.add(helpersSettings, 'visible').setValue(false).onChange(function (newValue) {
-        helperPlane.visible = helpersSettings.visible;
-        material_HelperCUBE.visible = helpersSettings.visible
-    });
-gui.add(uniforms.u_distanceEffect, 'value', 100.0, 1000.0, 10.0).setValue(220.0).name("u_distanceEffect");    
-gui.add(uniforms.u_noiseScale, 'value', 0.1, 3.0, 0.1).setValue(0.5).name("u_noiseScale");  
-gui.add(uniforms.u_scaleEffect, 'value', 0.1, 10.0, 0.1).setValue(1.0).name("u_scaleEffect");  
-
-
-// Renderer
-const renderer = new THREE.WebGLRenderer({
-    canvas: canvas,
-    antialias : true
-})
-renderer.setSize(sizes.width, sizes.height)
-
-// Animate
-const clock = new THREE.Clock()
-
-const tick = () => {
-    const elapsedTime = clock.getElapsedTime()
-
-    // Update controls
-    controls.update();
-
-    //Plane 
-    let target = new THREE.Vector3();
-    camera.getWorldDirection(target);
-
-    planeSettings.originPlane.copy(camera.position).addScaledVector(target, planeSettings.planeDistans);
-    plane.setFromNormalAndCoplanarPoint(target.negate(), planeSettings.originPlane);
-
-    // update the picking ray with the camera and pointer position
-    raycaster.setFromCamera(pointer, camera);
-
-    // calculate objects intersecting the picking ray
-    raycaster.ray.intersectPlane(plane, planeSettings.planeIntersect);
+    window.addEventListener('resize', onResize);
     
-    //testBox
-    const distPointerCenter = planeSettings.planeIntersect.distanceTo(pointerCenter.position); 
-    pointerCenter.position.lerp(planeSettings.planeIntersect, Math.sign(distPointerCenter) * 1.00); 
+    gui.add(pointerCenter, "t", 0.0, 1.0, 0.01).setValue(0.0).name("t");
 
-    mesh_HelperCUBE.position.set(pointerCenter.position.x, pointerCenter.position.y, pointerCenter.position.z);
 
-    uniforms.u_pointPosition.value = mesh_HelperCUBE.position.toArray();
-    uniforms.u_time.value = elapsedTime;
-       
-    mesh.instanceMatrix.needsUpdate = true;
-    mesh.instanceColor.needsUpdate = false;
-    
-    // Render
-    renderer.render(scene, camera)
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({
+        canvas: canvas,
+        antialias: true
+    })
+    renderer.setSize(sizes.width, sizes.height)
 
-    // Call tick again on the next frame
-    window.requestAnimationFrame(tick)
-}
+    // Animate
+    const clock = new THREE.Clock()
 
-tick()
+    const tick = () => {
+        const elapsedTime = clock.getElapsedTime()
+
+        // Update controls
+        controls.update();
+
+        curve.getPoint(Math.sin(elapsedTime * 0.1), pointerCenter.position);
+
+        mesh_HelperCUBE.position.set(pointerCenter.position.x, pointerCenter.position.y, pointerCenter.position.z);
+
+        uniforms.u_pointPosition.value = mesh_HelperCUBE.position.toArray();
+ 
+        mesh.instanceMatrix.needsUpdate = true;
+        mesh.instanceColor.needsUpdate = false;
+
+        // Render
+        renderer.render(scene, camera)
+
+        // Call tick again on the next frame
+        window.requestAnimationFrame(tick)
+    }
+
+    tick()
 
     function onPointerMove(event) {
 
@@ -209,3 +172,227 @@ tick()
 }
 
 main();
+
+
+function fuilsBilder(mesh, sizeField, sizeBoxInstance) {
+
+    let count = 0;
+    let offset = sizeBoxInstance * 0.5;
+    const instanceNormalEffect = [];
+    const instanceLayer = [];
+
+    //XY
+    for (let layer = 0; layer < 4; layer++) {
+
+        for (let i = 0; i < sizeField; i++) {
+
+            for (let j = 0; j < sizeField; j++) {
+
+                let normalEffect = new Vector3(0, 0, 1);
+
+                let matrix = new THREE.Matrix4();
+
+                let posInstans = new THREE.Vector3(
+                    i * (sizeBoxInstance) + offset,
+                    j * (sizeBoxInstance) + offset,
+                    sizeField * (sizeBoxInstance));
+
+                posInstans.z += layer * 0.5;
+
+                let scale = 1.0 - layer * 0.1;
+                matrix.makeScale(scale, scale, 1.0);
+
+                matrix.setPosition(posInstans);
+
+                mesh.setMatrixAt(count, matrix);
+
+                mesh.setColorAt(count, new THREE.Vector3(1.0, 1.0, 1.0));
+
+                instanceNormalEffect.push(normalEffect.toArray());
+                instanceLayer.push(layer);
+
+                count++
+
+            }
+        }
+    }
+
+    //XZ
+    for (let layer = 0; layer < 4; layer++) {
+
+        for (let i = 0; i < sizeField; i++) {
+
+            for (let k = 0; k < sizeField; k++) {
+
+                let normalEffect = new Vector3(0, 1, 0);
+
+                let matrix = new THREE.Matrix4();
+
+                let posInstans = new THREE.Vector3(
+                    i * (sizeBoxInstance) + offset,
+                    sizeField * (sizeBoxInstance),
+                    k * (sizeBoxInstance) + offset);
+
+                posInstans.y += layer * 0.5;
+
+                let scale = 1.0 - layer * 0.1;
+                let quaternion = new THREE.Quaternion();
+                quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+                matrix.compose(posInstans, quaternion, new Vector3(scale, scale, 1.0))
+
+                mesh.setMatrixAt(count, matrix);
+
+                mesh.setColorAt(count, new THREE.Vector3(1.0, 1.0, 1.0));
+                instanceNormalEffect.push(normalEffect.toArray());
+                instanceLayer.push(layer);
+                count++
+
+            }
+        }
+    }
+
+    //YZ
+    for (let layer = 0; layer < 4; layer++) {
+        for (let j = 0; j < sizeField; j++) {
+
+            for (let k = 0; k < sizeField; k++) {
+
+                let normalEffect = new Vector3(1, 0, 0);
+                let matrix = new THREE.Matrix4();
+
+                let posInstans = new THREE.Vector3(
+                    sizeField * (sizeBoxInstance),
+                    j * (sizeBoxInstance) + offset,
+                    k * (sizeBoxInstance) + offset);
+
+                posInstans.x += layer * 0.5;
+
+                let scale = 1.0 - layer * 0.1;
+                let quaternion = new THREE.Quaternion();
+                quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+                matrix.compose(posInstans, quaternion, new Vector3(scale, scale, 1.0))
+
+
+                mesh.setMatrixAt(count, matrix);
+
+                mesh.setColorAt(count, new THREE.Vector3(1.0, 1.0, 1.0));
+                instanceNormalEffect.push(normalEffect.toArray());
+                instanceLayer.push(layer);
+                count++
+
+            }
+        }
+    }
+
+    //back side
+
+    //XY
+    for (let layer = 0; layer < 4; layer++) {
+
+        for (let i = 0; i < sizeField; i++) {
+
+            for (let j = 0; j < sizeField; j++) {
+
+                let normalEffect = new Vector3(0, 0, -1);
+
+                let matrix = new THREE.Matrix4();
+
+                let posInstans = new THREE.Vector3(
+                    i * (sizeBoxInstance) + offset,
+                    j * (sizeBoxInstance) + offset,
+                    0);
+
+                posInstans.z -= layer * 0.5;
+
+                let scale = 1.0 - layer * 0.1;
+                matrix.makeScale(scale, scale, 1.0);
+
+                matrix.setPosition(posInstans);
+
+                mesh.setMatrixAt(count, matrix);
+
+                mesh.setColorAt(count, new THREE.Vector3(1.0, 1.0, 1.0));
+
+                instanceNormalEffect.push(normalEffect.toArray());
+                instanceLayer.push(layer);
+
+                count++
+
+            }
+        }
+    }
+    
+    //XZ
+    for (let layer = 0; layer < 4; layer++) {
+
+        for (let i = 0; i < sizeField; i++) {
+
+            for (let k = 0; k < sizeField; k++) {
+
+                let normalEffect = new Vector3(0, -1, 0);
+
+                let matrix = new THREE.Matrix4();
+
+                let posInstans = new THREE.Vector3(
+                    i * (sizeBoxInstance) + offset,
+                    0,
+                    k * (sizeBoxInstance) + offset);
+
+                posInstans.y -= layer * 0.5;
+
+                let scale = 1.0 - layer * 0.1;
+                let quaternion = new THREE.Quaternion();
+                quaternion.setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+                matrix.compose(posInstans, quaternion, new Vector3(scale, scale, 1.0))
+
+                mesh.setMatrixAt(count, matrix);
+
+                mesh.setColorAt(count, new THREE.Vector3(1.0, 1.0, 1.0));
+                instanceNormalEffect.push(normalEffect.toArray());
+                instanceLayer.push(layer);
+                count++
+
+            }
+        }
+    }
+
+    //YZ
+    for (let layer = 0; layer < 4; layer++) {
+        for (let j = 0; j < sizeField; j++) {
+
+            for (let k = 0; k < sizeField; k++) {
+
+                let normalEffect = new Vector3(-1, 0, 0);
+                let matrix = new THREE.Matrix4();
+
+                let posInstans = new THREE.Vector3(
+                    0,
+                    j * (sizeBoxInstance) + offset,
+                    k * (sizeBoxInstance) + offset);
+
+                posInstans.x -= layer * 0.5;
+
+                let scale = 1.0 - layer * 0.1;
+                let quaternion = new THREE.Quaternion();
+                quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+                matrix.compose(posInstans, quaternion, new Vector3(scale, scale, 1.0))
+
+
+                mesh.setMatrixAt(count, matrix);
+
+                mesh.setColorAt(count, new THREE.Vector3(1.0, 1.0, 1.0));
+                instanceNormalEffect.push(normalEffect.toArray());
+                instanceLayer.push(layer);
+                count++
+
+            }
+        }
+    }
+
+
+
+    return {
+        instanceNormalEffect, instanceLayer
+    }
+
+}
